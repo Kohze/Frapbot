@@ -462,8 +462,6 @@ shinyServer(
         
         fitpre = predict(fit)
         diff = mxxp1m-fitpre
-        mad1 = mad(abs(diff))
-        mad2 = mad(diff)
         
         #extract the fitted tau
         tau = min(coef(fit)) 
@@ -476,8 +474,8 @@ shinyServer(
         #1.94 for 110nm resolution - function coming soon
         D = 0.25*a1*1.94/t12
         
-        output = data.frame(t12,rif,m1m,m2m,m3m,diff,fitpre,tm,mxxp1m,tau,m1,m2,m3,a,D,bleach,mad1,mad2)
-        colnames(output) = c("half time","quality","m1m","m2m","m3m","diff","fitpre","tm","mxxp1m","tau",names(m1[1]),names(m2[1]),names(m3[1]),names(a[1]),"diffusion","bleach","mad1","mad2")
+        output = data.frame(t12,rif,m1m,m2m,m3m,diff,fitpre,tm,mxxp1m,tau,m1,m2,m3,a,D,bleach)
+        colnames(output) = c("half time","quality","m1m","m2m","m3m","diff","fitpre","tm","mxxp1m","tau",names(m1[1]),names(m2[1]),names(m3[1]),names(a[1]),"diffusion","bleach")
         
         return(output)
       }
@@ -511,8 +509,6 @@ shinyServer(
             a=matrixH[14]
             D=matrixH[1,15]
             bleach=matrixH[1,16]
-            mad1=matrixH[1,17]
-            mad2=matrixH[1,18]
           }
         }
         
@@ -644,9 +640,8 @@ shinyServer(
           h6("Tau: ",tau," seconds^-1"),
           h6("D:",head(D,1), "µmeter² per second"),
           h6("T1/2: ",t12," seconds"),
-          h6("Standart Error:",rif2),
-          h6("MAD(abs): ",mad1),
-          h6("MAD: ",mad2)
+          h6("Standart Error:",rif2)
+      
         )
         
       })
