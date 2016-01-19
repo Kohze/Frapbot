@@ -1,20 +1,34 @@
 library(ggplot2)
 library(shiny)
+library(Cairo)
+library(DT)
+library(data.table)
+
+options(shiny.usecairo=T)
 
 
 
 shinyUI(fluidPage(
+  
+  tags$style("
+             body {
+             font-family: Roboto;
+             }
+             "
+  ),
                       fluidRow(
                           column(12,
                                  fluidRow(
                                    column(3,
                               wellPanel(
-                                fileInput('file','Choose CSV File',accept=c('text/csv','text/comma-separated-values,text/plain','.csv'), multiple=TRUE),
+                                fileInput('file','Frapbot 1.1: Choose CSV File', multiple=TRUE),
                                 uiOutput("dataSetChoice"),
                                 uiOutput("qualitySlider"),
                                 uiOutput("noBackground"),
                                 uiOutput("norm"),
+                                uiOutput("normSlider"),
                                 uiOutput("fitting"),
+                                uiOutput("ownFormula"),
                                 uiOutput("bleachTime"),
                                 uiOutput("manualInput"),
                                 uiOutput("mbleachTime"),
@@ -33,25 +47,37 @@ shinyUI(fluidPage(
                                   uiOutput("update1"),
                                   uiOutput("update2"))
                                 )),
+                              
                               mainPanel(
+                              
                                 fluidRow(
                                   column(12,
-                                         uiOutput("mainOutput")
+                                         uiOutput("mainOutput", height="800px")
+                                      
+                                         
                                   ),
-                                  column(3),
+                                  uiOutput("spacingLine"),
+                      
+                                  column(1),
                                   column(3,
                                          uiOutput("resultOutput")
                                   ),
                                   column(4,
-                                         uiOutput("resultOutput2")
+                                           uiOutput("resultOutput2")
+                                           
                                   ),
-                                  uiOutput("UIslider"),
-                                  tableOutput("contents")
-                                )
+                                  column(4,
+                                         uiOutput("resultOutput3")
+                                  )
+                                  
+                                ),
+                                uiOutput("spacingLine2"),
                                 
+                                br(),
+                                DT::dataTableOutput("contents")
                               ))
                               
-                              
+                           
                       
       
                           
