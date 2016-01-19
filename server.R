@@ -1,12 +1,19 @@
-#frapbot alpha 3
+#frapbot 1.1
 # server.R
 library(ggplot2)
 library(shiny)
 library(minpack.lm)
 library(dplyr)
+library(Cairo)
+library(grid)
+library(DT)
+library(data.table)
+
+
+
+options(shiny.usecairo=T)
 
 multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
-  library(grid)
   
   # Make a list from the ... arguments and plotlist
   plots <- c(list(...), plotlist)
@@ -53,7 +60,8 @@ shinyServer(
         inFile %>%
           rowwise() %>%
           do({
-            read.table(.$datapath, header=TRUE, sep=",")
+            fread(.$datapath, header = TRUE, data.table = FALSE)
+            
           })
       }
       })
@@ -104,7 +112,7 @@ shinyServer(
       if(is.null(input$Btime) | is.null(d())){return()}
       if(input$Btime != 1){return()}
       a = nrow(d())/4
-      sliderInput("blti","",1,a,5,1)
+      sliderInput("blti","",0,a,5,1)
     })
     
     output$dataSetChoice <- renderUI({
@@ -131,12 +139,26 @@ shinyServer(
     
     output$fitting <- renderUI ({
       if(is.null(d())){return()}
-      selectInput("fit","",c("Exponential Fitting"=1,"Double Exponential Fitting"=2))
+      selectInput("fit","",c("Exponential Fitting"=1,"Double Exponential Fitting"=2, "Custom Formula"=3))
+    })
+    
+    output$ownFormula <- renderUI({
+      if(is.null(d())){return()}
+      if (is.null(input$fit) | is.null(d())){return()}
+      if(!(input$fit == 3)){return()}
+      textInput("customFormula","",value = "b*(1-exp(-x*tm))+c")
     })
     
     output$norm <- renderUI({
       if(is.null(d())){return()}
-      selectInput("normal","",c("Full & Direct Normalization"=1,"averaged Normalization"=2))
+      selectInput("normal","",c("Direct Normalization"=1,"averaged Normalization"=2))
+    })
+    
+    output$normSlider <- renderUI({
+      if(is.null(d())){return()}
+      if (is.null(input$normal) | is.null(d())){return()}
+      if(!(input$normal == 2)){return()}
+      sliderInput("NormalizationSlider","",0,2,1.1,0.1)
     })
     
     output$scanTime <- renderUI({
@@ -144,20 +166,17 @@ shinyServer(
         sliderInput("t","Scan Time in ms", 1,1000,79)
     })
     
-    output$UIslider <- renderUI({
-      if (is.null(d())  | is.null(input$mainPanel)){return() }
-      if(input$mainPanel == "Frap Plot"){return()}
-      a = nrow(d())
-      sliderInput("slider","",1,a,25)
-    })
+   
     
-    output$contents <- renderTable({
-      if (is.null(input$slider)){return()}
+    output$contents <- DT::renderDataTable({
       if (is.null(d())  | is.null(input$mainPanel)){return()}
       if(input$mainPanel == "Frap Plot" & !(input$mainPanel == "Dataset")){return()}
-      head(d(),input$slider)
-    })
+      DT::datatable(d(), options = list(pageLength = 20))
+     
+      
+      })
     
+   
     ######################UI for manual ROI########################### 
     
     output$bleachROI <- renderUI({
@@ -171,7 +190,7 @@ shinyServer(
       if(is.null(input$ROI)){return()}
       if (!(input$ROI == 2) | is.null(d())){return()}
       colnames <- colnames(d())
-      selectInput("controlROIin","Control ROI",c(colnames),selectize=FALSE)
+      selectInput("controlROIin","Total ROI",c(colnames),selectize=FALSE)
     })
     
     output$bgROI <- renderUI({
@@ -262,7 +281,7 @@ shinyServer(
         for (i in 1:ncol(d)) {
           if (d[1,i]+2 == d[3,i]) {
             ## input scan time to t algorithm
-            t = d[i]*input$t*0.001
+            t = d[i]
            
           }
           if(!(head(d[i],1) == tail(d[i],1)) & !head(d[i],1)%%1 == 0 ) {
@@ -284,7 +303,7 @@ shinyServer(
           } 
           if (ranking[i] == 2) {
             m1 = m[i]
-            a = head(as1[i],1)
+            a1 = head(as1[i],1)
           }
           if (ranking[i] == 3) {
             m2 = m[i]
@@ -295,7 +314,7 @@ shinyServer(
         m1 = unlist(m1)
         m2 = unlist(m2)
         m3 = unlist(m3)
-        a = unlist(a)
+        a1 = unlist(a1)
         t = unlist(t)
         
         ##manual selection of ROI  
@@ -307,7 +326,7 @@ shinyServer(
               m1 = unlist(d[,input$bleachROIin])
               m2 = unlist(d[,input$controlROIin])
               m3 = unlist(d[,input$bgROI])
-              a = unlist(d[,input$areaROI])
+              a1 = unlist(d[,input$areaROI])
             })
           }}
         
@@ -321,7 +340,7 @@ shinyServer(
         if(!(is.null(m1))){
           m1b = c((tail(m1,(length(m1)-1))),tail(m1,1))
           bt = m1-m1b
-          if(max(m1-m1b) < 20){
+          if(max(m1-m1b) < (max(m2)*0.4)){
             alternate = 1
             bleach=0
           } else {
@@ -342,14 +361,13 @@ shinyServer(
           }
         }
       
-        ## end
-        
-            
-        
         
         ## end
-        a1 = a
-        
+        if(!(is.null(d())) & input$normal == 2) {
+          m2 = predict(smooth.spline(m2, spar = input$NormalizationSlider))$y
+          m3 = predict(smooth.spline(m3, spar = input$NormalizationSlider))$y
+        }
+
         #Subtract Background Noise
         if(input$noBG == TRUE){
         mx1 = m1-m3
@@ -364,7 +382,7 @@ shinyServer(
         
         cfm2=mx2/mx2[bleach+1]
         
-        if(!(is.null(input$Btime))){ 
+        if(!(is.null(input$Btime))){
           if(input$Btime == 3 | !(is.null(alternate)) & input$action) {
             if(input$action > 0){
               isolate({
@@ -382,7 +400,7 @@ shinyServer(
         mxxp1 = mxx1/median(mxx1[1:bleach])
         #Normalize  n= 6 to 100% of flourescence in region
         #n-> first afterbleach image
-        if(!(is.null(input$Btime))){ 
+        if(!(is.null(input$Btime))){
           if(input$Btime == 3 & input$action) {
             if(input$action > 0){
               isolate({
@@ -390,7 +408,7 @@ shinyServer(
                 mxxp1 = mxx1/(as.numeric(input$numInp))
               }) 
             }
-          } 
+          }
         }
         
         if(!(is.null(alternate))) {
@@ -404,78 +422,105 @@ shinyServer(
           }
         } 
         
-        # c is minimum observed value of all measurements - needed for fitting
-        c = min(mxxp1)
-      
+       
+    
+     
+        
         #FRAP formula: http://www.embl.de/eamnet/downloads/courses/FRAP2005/tzimmermann_frap.pdf
         # the Formeula is: f(t) = A(1-exp(-tau*t)) where t1,2 = ln0.5/-tau
+        
+        tm = tail(t,length(t)-bleach)
+        mxxp1m = tail(mxxp1,length(mxxp1)-bleach)
+        # c is minimum observed value of all measurements - needed for fitting
+        c = min(mxxp1m)
         #b is the range of values (from 100%-x%) - also called data span of FRAP values
-        #b = median(mxxp1[0:5]) - median(mxxp1[7:15])
-        b = median(tail(mxxp1,20))-median(mxxp1[1:4])
+        b = median(tail(mxxp1m,20)) - c
         
-        if(!(is.null(input$Btime))){ 
-          if(input$Btime == 3 | !(is.null(alternate)) & input$action) {
-            if(input$action > 0){
-              isolate({
-                input$action
-                b = median(tail(mxxp1,20))-median(mxxp1[1:4])
-              }) 
-            }
-          } else {
-            b = median(tail(mxxp1,20))-median(mxxp1[(bleach+1):(bleach+4)])
-          }
-        }
+        b = b[1]
+        c = c[1]
         
-        tm = t
-        mxxp1m = mxxp1 
-        #select only post bleach values
-        if(!(is.null(input$Btime))){ 
-          if(input$Btime == 3 | !(is.null(alternate)) & input$action) {
-            if(input$action > 0){
-              isolate({
-                input$action
-                tm = t
-                mxxp1m = mxxp1          
-              }) 
-            }
-          } else {
-            tm = tail(t,length(t)-bleach)
-            mxxp1m = tail(mxxp1,length(mxxp1)-bleach)
-          }
-        }
+        #command line output for tests
+        #cat(c("start",min(mxxp1m),b,c,"end"), file=stderr())
+        #cat(c("P",length(tm),"t12",length(mxxp1m),length(b),length(c),"/n","PS"), file=stderr())
         
         #make data.frame for further analysis with post bleach values
         mxf = data.frame(tm,mxxp1m,b,c)
         
         #levenberg marquard algorithm
-        fit = nlsLM(mxxp1~ b-b*exp(-x*t)+c, data = mxf, start =list(x=0.01))
+        if(input$fit == 3 & input$action){
+            formulaInput = input$customFormula
+            formulaChoice = as.formula(paste("mxxp1m ~",formulaInput))
+        if(length(grep("x2",formulaInput))>=1){
+            fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.01,x2=0.01)) 
+        } else {
+            fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.05)) 
+          }
+          
+        } else if(input$fit == 2){
+          fit = nlsLM(mxxp1m ~ bs*(1-exp(-x*tm))+bs2*(1-exp(-x2*tm))+c, data = mxf, start =list(bs=0.5,bs2 = 1,x=0.05,x2=0.1))
+          
+        } else {
+          formulaChoice = as.formula("mxxp1m ~ b*(1-exp(-x*tm))+c")
+          fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.001))
+          
+        }
         
+        
+
         if(!is.null(summary(fit)$sigma)){
           r = summary(fit)$sigma
           rif=1-summary(fit)$sigma
         }
         
-        #show fit
+        #adjusting for the input time - was set behind the fitting to reduce singularities
+        timeCoeff = input$t*0.001
+        tm = tm*timeCoeff
+        
         m1m = tail(m1,length(m1)-bleach)
         m2m = tail(m2,length(m2)-bleach)
         m3m = tail(m3,length(m3)-bleach)
-        
+       
+        #show fit
         fitpre = predict(fit)
+        fitpre = tail(fitpre,length(fitpre))
+        #fitpre = tail(fitpre,length(fitpre)-bleach)
+        
+        
         diff = mxxp1m-fitpre
+
         
         #extract the fitted tau
-        tau = min(coef(fit)) 
-        
-        #calculate t1/2
-        t12 = (log(0.5))/(-tau)
-        
         #D calculation with D = 0.25*r^2 / t12
         #http://www.ncbi.nlm.nih.gov/pmc/articles/PMC3731631/
-        #1.94 for 110nm resolution - function coming soon
-        D = 0.25*a1*1.94/t12
+        if(!(is.na(as.vector(coef(fit)[2])))){
+          tau = ((as.vector(coef(fit))[1])/(timeCoeff))
+          tau2 = ((as.vector(coef(fit))[2])/(timeCoeff))
+          t12 = ((log(0.5))/(-tau))
+          t122 = ((log(0.5))/(-tau2))
+          
+          D = 0.25*a1*1.94/t12
+          D2 = 0.25*a1*1.94/t122
+          
+          } else {
+          tau = ((as.vector(coef(fit))[1])/(timeCoeff))
+          t12 = ((log(0.5))/(-tau))
+          D = 0.25*a1*1.94/t12
+          
+          tau2 = FALSE
+          t122 = FALSE
+          D2 = FALSE
+          }
+
+        a1 = a1[1]
+        D = D[1]
+        D2 = D2[1]
         
-        output = data.frame(t12,rif,m1m,m2m,m3m,diff,fitpre,tm,mxxp1m,tau,m1,m2,m3,a,D,bleach)
-        colnames(output) = c("half time","quality","m1m","m2m","m3m","diff","fitpre","tm","mxxp1m","tau",names(m1[1]),names(m2[1]),names(m3[1]),names(a[1]),"diffusion","bleach")
+        #command line output for tests
+        #cat(c(length(t12),"t12",length(rif),length(m1m),length(m2m),length(m3m),length(diff),length(fitpre),length(tm),length(mxxp1m),length(tau),length(m1m),length(m2m),length(m3m),length(a1),length(D),length(bleach),length(tau2),length(tau2),length(t122),length(D2)), file=stderr())
+        
+        output = data.frame(t12,rif,m1m,m2m,m3m,diff,fitpre,tm,mxxp1m,tau,a1,D,bleach,tau2,t122,D2)
+        
+        colnames(output) = c("half time","quality",names(m1[1]),names(m2[1]),names(m3[1]),"diff","fitpre","tm","mxxp1m","tau",names(a1[1]),"diffusion","bleach","tau2","half time 2","diffusion 2")
         
         return(output)
       }
@@ -494,27 +539,42 @@ shinyServer(
           
           if(choice == i){
             t12=matrixH[1,1]
+            t122=matrixH[1,15]
+            
             rif2=matrixH[1,2]
+            
+            #unprocessed ROI means
             m1m=matrixH[,3]
             m2m=matrixH[,4]
             m3m=matrixH[,5]
+            
+            #names of areas
+            m1=matrixH[3]
+            m2=matrixH[4]
+            m3=matrixH[5]
+            a1=matrixH[11]
+            
+            
             diff=matrixH[,6]
             fitpre=matrixH[,7]
             tm=matrixH[,8]
             mxxp1m=matrixH[,9]
+            
             tau=matrixH[1,10]
-            m1=matrixH[11]
-            m2=matrixH[12]
-            m3=matrixH[13]
-            a=matrixH[14]
-            D=matrixH[1,15]
-            bleach=matrixH[1,16]
+            tau2=matrixH[1,14]
+            
+            
+            D=matrixH[1,12]
+            D2=matrixH[1,16]
+            
+            bleach=matrixH[1,13]
           }
         }
         
         tHalf=tHalf[fitQuality>input$quality]
         tScatterVector=tHalf
-        sNumber=seq(1,1,length.out=length(tScatterVector))
+        #sNumber=seq(1,1,length.out=length(tScatterVector))
+        sNumber=rep("all fittings",length(tScatterVector))
         
       }
       
@@ -524,7 +584,8 @@ shinyServer(
       p1 = data.frame(mxxp1m,tm,fitpre,diff,m1m,m2m,m3m)
       
       if(length(sctn)>3){
-      p2 = data.frame(tScatterVector,sNumber)
+      p2 = data.frame(tScatterVector,sNumber,t12)
+      #p3 = data.frame()
       }
       
       ######################################################
@@ -534,22 +595,23 @@ shinyServer(
       ## graph plot code - if fitting quality is bad, no fitting difference plot is shown (sigma value)
       
       if(rif2>=input$quality){
-        adv <- ggplot(p1,aes(y=mxxp1m,x=tm))+geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.4)+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.7,linetype=3)
+        adv <- ggplot(p1,aes(y=mxxp1m,x=tm))+geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.3)+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.7,linetype=3)
         adv <- adv+geom_abline(intercept=1,slope=0,alpha=0.7,size=0.8,linetype=3)+geom_point()+geom_path(alpha=0.3)
         adv <- adv+geom_line(x = tm, y = fitpre,alpha=0.7, color="steelblue3",linetype=1,size=1.2)+expand_limits(y= c(0,1.1))
-        adv <- adv+theme(aspect.ratio=0.4)+xlab("time in sec")+ylab("relative signal")
+        adv <- adv+theme(aspect.ratio=0.35)+xlab("time in sec")+ylab("relative signal")
         
-        bdv <- ggplot(p1,aes(y=diff,x=tm))+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.5)
-        bdv <- bdv+geom_path(alpha=0.2)+stat_smooth(level = 0,method=loess,alpha=0.7, color="steelblue3",linetype=1,size=1.2)
-        bdv <- bdv+geom_point()+theme(aspect.ratio=0.4)+xlab("time in sec")+ylab("fitting difference")
+        bdv <- ggplot(p1,aes(y=diff,x=tm))+geom_abline(intercept=0,slope=0,size=0.5,alpha=0.5)
+        bdv <- bdv+geom_path(alpha=0.2,size = 0.1)
+        bdv <- bdv+geom_point(size=0.5)+theme(aspect.ratio=0.35)+xlab("time in sec")+ylab("fitting difference")+stat_smooth(level = 0,method=loess,alpha=0.7, color="steelblue3",linetype=1,size=0.9)
         
         cdv <- ggplot(data = p1,aes(y=m1m,x=tm))+geom_point(aes(y=m1m,x=tm),color="green",size=0.8) 
         cdv <- cdv+geom_point(aes(y=m2m,x=tm),color="blue",size=0.8) 
-        cdv <- cdv+geom_point(aes(y=m3m,x=tm),color="black",size=0.8)+theme(aspect.ratio=0.4) 
+        cdv <- cdv+geom_point(aes(y=m3m,x=tm),color="black",size=0.8)+theme(aspect.ratio=0.35) 
         cdv <- cdv+xlab("time in sec")+ylab("signal")
         
         if(length(sctn)>3){
-          edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.4)
+          edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
+          edv <- edv + geom_point(data=p2, aes(y=t12, x=sNumber), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
           multiplot(cdv,adv,edv,bdv,cols=2)
         } else {
           multiplot(cdv,adv,bdv,cols=2)
@@ -558,22 +620,23 @@ shinyServer(
       
       
       if(rif2<input$quality) {
-        adv <- ggplot(p1,aes(y=mxxp1m,x=tm))+geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.4)+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.7,linetype=3)
+        adv <- ggplot(p1,aes(y=mxxp1m,x=tm))+geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.3)+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.7,linetype=3)
         adv <- adv+geom_abline(intercept=1,slope=0,alpha=0.7,size=0.8,linetype=3)+geom_point()+geom_path(alpha=0.3)
         adv <- adv+expand_limits(y= c(0,1.1))
-        adv <- adv+theme(aspect.ratio=0.4)+xlab("time in sec")+ylab("relative signal")
+        adv <- adv+theme(aspect.ratio=0.35)+xlab("time in sec")+ylab("relative signal")
         
-        bdv <- ggplot(p1,aes(y=diff,x=tm))+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.5)
-        bdv <- bdv+geom_point()
-        bdv <- bdv+theme(aspect.ratio=0.4)+xlab("time in sec")+ylab("fitting difference")+stat_smooth(level = 0,method=loess,alpha=0.7, color="steelblue3",linetype=1,size=1.2)+geom_path(alpha=0.3)
+        bdv <- ggplot(p1,aes(y=diff,x=tm))+geom_abline(intercept=0,slope=0,size=0.5,alpha=0.5)
+        bdv <- bdv+geom_point(size=0.5)
+        bdv <- bdv+theme(aspect.ratio=0.35)+xlab("time in sec")+ylab("fitting difference")+stat_smooth(level = 0,method=loess,alpha=0.7, color="steelblue3",linetype=1,size=0.9)+geom_path(alpha=0.3,size=0.1)
         
         cdv <- ggplot(data = p1,aes(y=m1m,x=tm))+geom_point(aes(y=m1m,x=tm),color="green",size=0.8) 
         cdv <- cdv+geom_point(aes(y=m2m,x=tm),color="blue",size=0.8) 
-        cdv <- cdv+geom_point(aes(y=m3m,x=tm),color="black",size=0.8)+theme(aspect.ratio=0.4) 
+        cdv <- cdv+geom_point(aes(y=m3m,x=tm),color="black",size=0.8)+theme(aspect.ratio=0.35) 
         cdv <- cdv+xlab("time in sec")+ylab("signal")
         
         if(length(sctn)>3){
-        edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.4)
+        edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
+        edv <- edv + geom_point(data=p2, aes(y=t12, x=sNumber), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
         multiplot(cdv,adv,edv,cols=2)
         } else {
           multiplot(cdv,adv,cols=2)
@@ -589,11 +652,10 @@ shinyServer(
         if(input$ROI == 2) {return ()}
         is <- fluidPage( 
           br(),
-          h6("Bleach ROI :",names(m1[1])),
-          h6("Ctrl ROI :",names(m2[1])),
-          h6("BG ROI :",names(m3[1])),
-          h6("Bleach Area :",names(a[1]))
-          
+          h5("Bleach ROI :",names(m1[1])),
+          h5("Total ROI :",names(m2[1])),
+          h5("BG ROI :",names(m3[1])),
+          h5("Bleach Area :",names(a1[1]))
         )
       })
       
@@ -605,7 +667,7 @@ shinyServer(
           br(),
           if(!(is.null(input$quality))){
             if(rif2>=input$quality){
-              code("Fitting quality: Accepted!")
+              h5("Fitting quality: Accepted!")
             } else {
               code("fitting quality: Not accepted!")
             }
@@ -616,33 +678,71 @@ shinyServer(
               if(input$action > 0){
                 isolate({
                   input$action
-                  h6("Pre-bleach value:",input$numInp)
+                  h5("Pre-bleach value:",input$numInp)
                 }) 
               }
             } else {
               if(is.null(bleach)){
-                h6("Pre-bleach measurements:",bleach)
+                h5("Pre-bleach measurements:",bleach)
               } else {
                 code("No pre-bleach values!")
                 
               }
             }
+          },
+          br(),
+          
+          if(((median(m1m))/(median(m3m))) <= 2){
+              code("The Background/Bleach ratio is high!")
           }
           
+        )
+      })
+      
+      output$spacingLine <- renderUI({
+        if(is.null(d()) | is.null(input$mainPanel)){return()}
+        if(input$mainPanel == "Dataset"){return()}
+        is <- fluidPage(
+          br(),
+          h6("'"),
+          tags$hr()
+        )
+      })
+      
+      output$spacingLine2 <- renderUI({
+        if(is.null(d()) | is.null(input$mainPanel)){return()}
+        if(input$mainPanel == "Dataset"){return()}
+        is <- fluidPage(
+          br(),
+          tags$hr()
         )
       })
       
       output$resultOutput2 <- renderUI({
         if(is.null(d()) | is.null(input$mainPanel)){return()}
         if(input$mainPanel == "Dataset"){return()}
-        is <- fluidPage( 
+        if(t122 == FALSE){
+        is <- fluidPage(
+  
+          tags$div( class = "test1",
           br(),
-          h6("Tau: ",tau," seconds^-1"),
-          h6("D:",head(D,1), "µmeter² per second"),
-          h6("T1/2: ",t12," seconds"),
-          h6("Standart Error:",rif2)
-      
+          h5("Tau: ",round(tau,4)," seconds^-1"),
+          h5("Apparent D:",round(head(D,1),4), "µmeter² per second"),
+          h5("T1/2: ",round(t12,4)," seconds"),
+          h5("Standart Error:",round(rif2,4))
+          )
         )
+        } else {
+          is <- fluidPage(
+          br(),
+          h5("Tau: ",round(tau,4)," seconds^-1"),
+          h5("Tau2: ",round(tau2,4)," seconds^-1"),
+          h5("Apparent D:",round(head(D,1),4), "µmeter² per second"),
+          h5("Apparent D2:",round(head(D2,1),4), "µmeter² per second"),
+          h5("T1/2: ",round(t12,4)," seconds"),
+          h5("T1/2 2: ",round(t122,4)," seconds"),
+          h5("Standart Error:",round((rif2),4))
+          )}
         
       })
     }
