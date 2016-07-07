@@ -5,6 +5,8 @@ library(DT)
 library(data.table)
 
 options(shiny.usecairo=T)
+options(shiny.autoreload.interval = 200)
+
 
 
 
@@ -21,7 +23,7 @@ shinyUI(fluidPage(
                                  fluidRow(
                                    column(3,
                               wellPanel(
-                                fileInput('file','Frapbot 1.1: Choose CSV File', multiple=TRUE),
+                                fileInput('file','Frapbot 1.2: Choose CSV File', multiple=TRUE),
                                 uiOutput("dataSetChoice"),
                                 uiOutput("qualitySlider"),
                                 uiOutput("noBackground"),

@@ -9,9 +9,10 @@ library(grid)
 library(DT)
 library(data.table)
 
-
-
 options(shiny.usecairo=T)
+options(shiny.autoreload.interval = 200)
+
+
 
 multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
   
@@ -77,9 +78,27 @@ shinyServer(
     output$update1 <- renderUI ({
       if(is.null(d())){return()}
       splitLayout(
-        downloadButton("download", label="Download")
+        downloadButton("downloadData", label="Download")
       )
     })
+    
+    output$downloadData <- downloadHandler(
+      filename = 'FrapBot.zip',
+      #filename = function(){
+      #  paste("test", "csv", sep = ".")
+      # },
+      
+      content = function(fname) {
+        fs <- c("Fitted_Curves.csv", "Half_Time.csv")
+        write.csv(allFitsTable, file = "Fitted_Curves.csv", sep =",")
+        write.csv(halfTimeGlobal, file = "Half_Time.csv", sep =",")
+        
+        zip(zipfile=fname, files=fs)
+        if(file.exists(paste0(fname, ".zip"))) {file.rename(paste0(fname, ".zip"), fname)}
+      },
+      contentType = "application/zip"
+    )
+    
     
     output$qualitySlider <- renderUI ({
       if(is.null(d())){return()}
@@ -213,7 +232,7 @@ shinyServer(
     output$main2 <- renderPlot({
       d = d()
       
-      alternate=NULL
+      alternate = NULL
       
       for (i in 1:ncol(d)) {
         if (d[1,i]+2 == d[3,i]) {
@@ -222,9 +241,9 @@ shinyServer(
       }
       
       if(!(is.null(input$SlChoice))){
-        choice=input$SlChoice
+        choice = input$SlChoice
       } else {
-        choice=1
+        choice = 1
       }
       
       if(!(is.null(sc) & !(is.null(input$SlChoice)))){
@@ -247,7 +266,7 @@ shinyServer(
         d = Data
         choice = FileChoice
         
-        alternate=NULL
+        alternate = NULL
         
         for (i in 1:ncol(d)) {
           if (d[1,i]+2 == d[3,i]) {
@@ -296,6 +315,7 @@ shinyServer(
         as1 = ar[2:ncol(ar)]
         
         ranking = rank(colSums(m))
+
         
         for (i in 1:ncol(m)) {
           if (ranking[i] == 1) {
@@ -309,17 +329,14 @@ shinyServer(
             m2 = m[i]
           }
         }
+
         
         # variables from the auto finder need to be unlisted (to a vector) to proceed
-        m1 = unlist(m1)
-        m2 = unlist(m2)
-        m3 = unlist(m3)
-        a1 = unlist(a1)
-        t = unlist(t)
+       
         
         ##manual selection of ROI  
         
-        if(!(is.null(input$ROI)) & !(is.null(d()))){
+        if(!(is.null(input$ROI)) & !(is.null(d())) & !(is.null(m2))){
           if(input$ROI == 2 & input$action){
             input$action
             isolate({
@@ -327,10 +344,19 @@ shinyServer(
               m2 = unlist(d[,input$controlROIin])
               m3 = unlist(d[,input$bgROI])
               a1 = unlist(d[,input$areaROI])
-            })
-          }}
+              t = unlist(t)
+              
+            }) 
+          } else {
+            m1 = unlist(m1)
+            m2 = unlist(m2)
+            m3 = unlist(m3)
+            a1 = unlist(a1)
+            t = unlist(t)
+          }
+          }
         
-        bleach=0
+        #bleach=0
         
         if(!(is.null(alternate))) {
           rm(alternate)
@@ -363,6 +389,7 @@ shinyServer(
       
         
         ## end
+        #The normalizing smoothing function
         if(!(is.null(d())) & input$normal == 2) {
           m2 = predict(smooth.spline(m2, spar = input$NormalizationSlider))$y
           m3 = predict(smooth.spline(m3, spar = input$NormalizationSlider))$y
@@ -380,7 +407,7 @@ shinyServer(
         #correlation factor
         #all values devided by first post bleach integer of CTRL
         
-        cfm2=mx2/mx2[bleach+1]
+        cfm2 = mx2/mx2[bleach+1]
         
         if(!(is.null(input$Btime))){
           if(input$Btime == 3 | !(is.null(alternate)) & input$action) {
@@ -394,8 +421,8 @@ shinyServer(
         }
         
         #correct for correlation factor
-        mxx1=mx1/cfm2
-        mxx2=mx2/cfm2
+        mxx1 = mx1/cfm2
+        mxx2 = mx2/cfm2
         
         mxxp1 = mxx1/median(mxx1[1:bleach])
         #Normalize  n= 6 to 100% of flourescence in region
@@ -430,6 +457,8 @@ shinyServer(
         # the Formeula is: f(t) = A(1-exp(-tau*t)) where t1,2 = ln0.5/-tau
         
         tm = tail(t,length(t)-bleach)
+        tm = tm - tm[1]
+        
         mxxp1m = tail(mxxp1,length(mxxp1)-bleach)
         # c is minimum observed value of all measurements - needed for fitting
         c = min(mxxp1m)
@@ -529,52 +558,63 @@ shinyServer(
       tScatterVector = c()
       tHalf = c()
       fitQuality = c()
+      allFits = c()
+      
       
       if(!is.null(d())){
         for(i in 1:(length(sctn)-1)){
-          matrixH=ScatterPlot(d(),i)
+          matrixH = ScatterPlot(d(),i)
           
-          tHalf=c(c(tHalf),matrixH[1,1])
-          fitQuality=c(c(fitQuality),matrixH[2,1])
+          tHalf = c(c(tHalf),matrixH[1,1])
+          fitQuality = c(c(fitQuality),matrixH[2,1])
+          
+          if(is.null(allFits)){
+            allFits = cbind(matrixH[,8],matrixH[,7])
+          } else {
+            allFits = cbind(allFits,matrixH[,7])
+          }
           
           if(choice == i){
-            t12=matrixH[1,1]
-            t122=matrixH[1,15]
+            t12 = matrixH[1,1]
+            t122 = matrixH[1,15]
             
-            rif2=matrixH[1,2]
+            rif2 = matrixH[1,2]
             
             #unprocessed ROI means
-            m1m=matrixH[,3]
-            m2m=matrixH[,4]
-            m3m=matrixH[,5]
+            m1m = matrixH[,3]
+            m2m = matrixH[,4]
+            m3m = matrixH[,5]
             
             #names of areas
-            m1=matrixH[3]
-            m2=matrixH[4]
-            m3=matrixH[5]
-            a1=matrixH[11]
+            m1 = matrixH[3]
+            m2 = matrixH[4]
+            m3 = matrixH[5]
+            a1 = matrixH[11]
             
             
-            diff=matrixH[,6]
-            fitpre=matrixH[,7]
-            tm=matrixH[,8]
-            mxxp1m=matrixH[,9]
+            diff = matrixH[,6]
+            fitpre = matrixH[,7]
+            tm = matrixH[,8]
+            mxxp1m = matrixH[,9]
             
             tau=matrixH[1,10]
-            tau2=matrixH[1,14]
+            tau2 = matrixH[1,14]
             
             
-            D=matrixH[1,12]
-            D2=matrixH[1,16]
+            D = matrixH[1,12]
+            D2 = matrixH[1,16]
             
-            bleach=matrixH[1,13]
+            bleach = matrixH[1,13]
           }
         }
         
-        tHalf=tHalf[fitQuality>input$quality]
-        tScatterVector=tHalf
+        halfTimeGlobal <<- tHalf
+        allFitsTable <<- allFits 
+        
+        tHalf = tHalf
+        tScatterVector = tHalf
         #sNumber=seq(1,1,length.out=length(tScatterVector))
-        sNumber=rep("all fittings",length(tScatterVector))
+        sNumber = rep("all fittings",length(tScatterVector))
         
       }
       
