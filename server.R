@@ -219,6 +219,54 @@ shinyServer(
     
     #main code - preprocessing
     
+    slopeInc <- function(x){
+      return((max(tail(x,length(x)/2))/min(head(x,length(x)/2)))*100)
+    }
+    
+    absRange <- function(x){
+      return(max(x)-min(x))
+    }
+    
+    assignCols <- function(x, withBG = TRUE){
+      
+      analysisFrame = data.table(
+        "name" = names(x), 
+        "sum" = colSums(x), 
+        "range" = as.vector(as.vector(sapply(x,absRange))),
+        "slope" = as.vector(as.vector(sapply(x,slopeInc)))
+        )
+    
+      firstSort = head(analysisFrame[order(-sum)],2)
+      firstSort[,mult := range*slope]
+      firstSort = firstSort[order(-mult)]
+      
+      ControlROIname = firstSort[2]$name
+      BleachROIname = firstSort[1]$name
+      
+      ControlROI = x[[ControlROIname]]
+      BleachROI = x[[BleachROIname]]
+      
+      if(withBG == TRUE){
+         BGname = tail(analysisFrame[order(-sum)]$name,1)
+         BGROI = x[[BGname]]
+      } else {
+        BGROI = FALSE
+      }
+      
+      namesOfInp = names(x)
+      columnFinder = which(BleachROIname == namesOfInp)
+      areaName = namesOfInp[columnFinder-1]
+      areaCOL = x[[areaName]]
+      
+      
+      output = list("ConROI" = ControlROI, "BleROI" = BleachROI, "BgROI" = BGROI, "AreaCOL" = areaCOL)
+      return(output)
+      
+    } 
+    
+    
+  
+    
     output$main2 <- renderPlot({
       d = d()
       
@@ -291,6 +339,8 @@ shinyServer(
         
         
         #deleting the NA in the matrix colunm 1
+        #rankFunc(m)
+        
         m = ms[2:ncol(ms)]
         as1 = ar[2:ncol(ar)]
         ranking = rank(colSums(m))
