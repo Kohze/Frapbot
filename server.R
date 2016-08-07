@@ -81,10 +81,6 @@ shinyServer(
     
     output$downloadData <- downloadHandler(
       filename = 'FrapBot.zip',
-      #filename = function(){
-      #  paste("test", "csv", sep = ".")
-      # },
-      
       content = function(fname) {
         fs <- c("Fitted_Curves.csv", "Half_Time.csv")
         write.csv(allFitsTable, file = "Fitted_Curves.csv", sep =",")
@@ -95,7 +91,6 @@ shinyServer(
       },
       contentType = "application/zip"
     )
-    
     
     output$qualitySlider <- renderUI ({
       if(is.null(d())){return()}
@@ -218,6 +213,34 @@ shinyServer(
     })
     
     #main code - preprocessing
+    extractCols <- function(d){
+      
+      extractTimeCol = function(d){
+        if (d[1]+2 == d[3]) {
+          return(TRUE)
+        } else { 
+          return(FALSE)
+        }
+      }
+      
+      
+      extractRegion = function(d){
+        if (!(head(d,1) == tail(d,1)) & !head(d,1)%%1 == 0) {
+          return(TRUE)
+        } else { 
+          return(FALSE)
+        }
+      }
+      
+      timeCol = lapply(d, extractTimeCol)
+      regionCol = lapply(d, extractRegion)
+      
+      t = d[which(timeCol == TRUE)]
+      region = d[which(regionCol == TRUE)]
+      
+      return(data.frame(t,region))
+      
+    }
     
     slopeInc <- function(x){
       return((max(tail(x,length(x)/2))/min(head(x,length(x)/2)))*100)
@@ -228,7 +251,6 @@ shinyServer(
     }
     
     assignCols <- function(x, withBG = TRUE){
-      
       analysisFrame = data.table(
         "name" = names(x), 
         "sum" = colSums(x), 
@@ -258,23 +280,35 @@ shinyServer(
       areaName = namesOfInp[columnFinder-1]
       areaCOL = x[[areaName]]
       
-      
       output = list("ConROI" = ControlROI, "BleROI" = BleachROI, "BgROI" = BGROI, "AreaCOL" = areaCOL)
       return(output)
-      
     } 
     
-    
-  
-    
-    output$main2 <- renderPlot({
-      d = d()
-      
-      for (i in 1:ncol(d)) {
+    findCountCol <- function(d){
+      for (i in 1:(ncol(d))) {
         if (d[1,i]+2 == d[3,i]) {
           sc = d[i]
         }
       }
+      return(sc)
+    }
+    
+    findBleach <- function(m1){
+      m1b = c((tail(m1,(length(m1)-1))),tail(m1,1))
+      bt = m1-m1b
+      if(max(m1-m1b) < (max(m2)*0.4)){
+        alternate = 1
+        bleach=0
+      } else {
+        alternate = NULL
+        bleach = which(max(m1-m1b)==bt) 
+      }
+      return(list("bleach" = bleach, "alternate" = alternate))
+    }
+    
+    output$main2 <- renderPlot({
+      d = d()
+      sc = findCountCol(d)
       
       if(!(is.null(input$SlChoice))){
         choice = input$SlChoice
@@ -292,25 +326,17 @@ shinyServer(
       } 
       
       #main function
-      
       ScatterPlot <- function(Data,FileChoice){
         
         d = Data
-        choice = FileChoice
         alternate = NULL
-        
-        for (i in 1:ncol(d)) {
-          if (d[1,i]+2 == d[3,i]) {
-            sc = d[i]
-          }
-        }
         
         if(!(is.null(sc) & !(is.null(input$SlChoice)))){
           sc1b = rbind(tail(sc,nrow(sc)-1),tail(sc,1))
           sct = sc-sc1b
           sctn = c(0,c(which(sct>2)),nrow(sc))
           if(length(sctn)>2) {
-            d = d[(sctn[choice]+1):(sctn[choice+1]),]
+            d = d[(sctn[FileChoice]+1):(sctn[FileChoice+1]),]
           }
         } 
         
@@ -318,46 +344,32 @@ shinyServer(
         #Mean1 = Bleach Region; Mean2 = Control Region; Mean3 = Background; Area1 = Bleach Area
         
         ### the automatic row to area/signal finding sub-routine
-        if (!(exists("ms"))){
-          ms = matrix(nrow=nrow(d))
-          ar = matrix(nrow=nrow(d))
-        } else {
-          ms = matrix(nrow=nrow(d))
-          ar = matrix(nrow=nrow(d))
-        }
+     
+        ms = matrix(nrow = nrow(d))
         
+       
         for (i in 1:ncol(d)) {
           if (d[1,i]+2 == d[3,i]) {
             ## input scan time to t algorithm
             t = d[i]
           }
           if(!(head(d[i],1) == tail(d[i],1)) & !head(d[i],1)%%1 == 0 ) {
-            ms = cbind(ms,d[i])
-            ar = cbind(ar,d[i-1])
+            ms = ifelse(exists("ms"), cbind(ms,d[i]), matrix(nrow = nrow(d)))
+            #ms = cbind(ms,d[i])
           }
         }
-        
-        
-        #deleting the NA in the matrix colunm 1
-        #rankFunc(m)
-        
-        m = ms[2:ncol(ms)]
-        as1 = ar[2:ncol(ar)]
-        ranking = rank(colSums(m))
 
-        for (i in 1:ncol(m)) {
-          if (ranking[i] == 1) {
-            m3 = m[i]
-          } 
-          if (ranking[i] == 2) {
-            m1 = m[i]
-            a1 = head(as1[i],1)
-          }
-          if (ranking[i] == 3) {
-            m2 = m[i]
-          }
-        }
+        #deleting the NA in the matrix colunm 1
+        m = extractCols(d)
+       
+        t = m[1]
+        colList = assignCols(m[2:4])
         
+        m3 = colList[["BleROI"]]
+        m2 = colList[["ConROI"]]
+        m1 = colList[["BgROI"]]
+        a1 = colList[["AreaCol"]]
+
         # variables from the auto finder need to be unlisted (to a vector) to proceed
         # manual selection of ROI  
         
@@ -378,26 +390,13 @@ shinyServer(
             a1 = unlist(a1)
             t = unlist(t)
           }
-          }
-        
-        # bleach=0
-        if(!(is.null(alternate))) {
-          rm(alternate)
         }
-        # end
+        
         # automatic bleach timepoint finder
-        if(!(is.null(m1))){
-          m1b = c((tail(m1,(length(m1)-1))),tail(m1,1))
-          bt = m1-m1b
-          if(max(m1-m1b) < (max(m2)*0.4)){
-            alternate = 1
-            bleach=0
-          } else {
-            bleach = which(max(m1-m1b)==bt) 
-          }
-        }
+        bleachPoint = findBleach(m1)
+        bleach = bleachPoint$bleach
+        alternate = bleachPoint$alternate
         
-        # end 
         # pre-Bleach slider to bleach
         if(!(is.null(input$Btime))){ 
           if(input$Btime == 1 & input$action) {
@@ -428,7 +427,6 @@ shinyServer(
         
         #correlation factor
         #all values devided by first post bleach integer of CTRL
-        
         cfm2 = mx2/mx2[bleach+1]
         
         if(!(is.null(input$Btime))){
@@ -538,13 +536,13 @@ shinyServer(
           t12 = ((log(0.5))/(-tau))
           t122 = ((log(0.5))/(-tau2))
           
-          D = 0.25*a1/(t12*pi)
-          D2 = 0.25*a1/(t122*pi)
+          D = 0.25*a1/(t12)
+          D2 = 0.25*a1/(t122)
           
         } else {
           tau = ((as.vector(coef(fit))[1])/(timeCoeff))
           t12 = ((log(0.5))/(-tau))
-          D = 0.25*a1/(t12*pi)
+          D = 0.25*a1/t12
           
           tau2 = FALSE
           t122 = FALSE
@@ -554,11 +552,6 @@ shinyServer(
         a1 = a1[1]
         D = D[1]
         D2 = D2[1]
-        
-        # command line output for tests
-        #cat(c(length(t12),"t12",length(rif),length(m1m),length(m2m),length(m3m),length(diff),length(fitpre),length(tm),
-        #length(mxxp1m),length(tau),length(m1m),length(m2m),length(m3m),length(a1),length(D),
-        #length(bleach),length(tau2),length(tau2),length(t122),length(D2)), file=stderr())
         
         output = list("half time" = t12,"quality" = rif,"m1m" = m1m, "m2m" = m2m,"m3m" = m3m,"diff" = diff,"fitpre" = fitpre,
                       "tm" = tm, "mxxp1m" = mxxp1m,"tau" = tau,"area" = a1,"diffusion" = D, "diffusion2" = D2,

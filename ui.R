@@ -4,11 +4,8 @@ library(Cairo)
 library(DT)
 library(data.table)
 
-options(shiny.usecairo=T)
+options(shiny.usecairo = TRUE)
 options(shiny.autoreload.interval = 200)
-
-
-
 
 shinyUI(fluidPage(
   
@@ -78,19 +75,6 @@ shinyUI(fluidPage(
                                 br(),
                                 DT::dataTableOutput("contents")
                               ))
-                              
-                           
-                      
-      
-                          
-                        
-                       
-                 
-                                
-                            
-                         
-                  
                      )
                 )
-  
   ))
