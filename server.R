@@ -296,15 +296,33 @@ shinyServer(
     findBleach <- function(m1){
       m1b = c((tail(m1,(length(m1)-1))),tail(m1,1))
       bt = m1-m1b
-      if(max(m1-m1b) < (max(m2)*0.4)){
+      if(max(bt) < (max(m1)*0.4)){
         alternate = 1
-        bleach=0
+        bleach = 1
       } else {
         alternate = NULL
-        bleach = which(max(m1-m1b)==bt) 
+        bleach = which(max(m1-m1b) == bt)+1 
       }
       return(list("bleach" = bleach, "alternate" = alternate))
     }
+    
+    fittingFunction <- function(mxf){
+      if(input$fit == 3 & input$action){
+        formulaInput = input$customFormula
+        formulaChoice = as.formula(paste("mxxp1m ~",formulaInput))
+        if(length(grep("x2",formulaInput))>=1){
+          fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.01,x2=0.01)) 
+        } else {
+          fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.05)) 
+        }
+      } else if(input$fit == 2){
+        fit = nlsLM(mxxp1m ~ bs*(1-exp(-x*tm))+bs2*(1-exp(-x2*tm))+c, data = mxf, start =list(bs=0.5,bs2 = 1,x=0.05,x2=0.1))
+      } else {
+        formulaChoice = as.formula("mxxp1m ~ b*(1-exp(-x*tm))+c")
+        fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.001))
+      }
+      return(fit)
+    }  
     
     output$main2 <- renderPlot({
       d = d()
@@ -377,9 +395,9 @@ shinyServer(
           if(input$ROI == 2 & input$action){
             input$action
             isolate({
-              m1 = unlist(d[,input$bleachROIin])
+              m1 = unlist(d[,input$bgROI])
               m2 = unlist(d[,input$controlROIin])
-              m3 = unlist(d[,input$bgROI])
+              m3 = unlist(d[,input$bleachROIin])
               a1 = unlist(d[,input$areaROI])
               t = unlist(t)
             }) 
@@ -394,8 +412,8 @@ shinyServer(
         
         # automatic bleach timepoint finder
         bleachPoint = findBleach(m1)
-        bleach = bleachPoint$bleach
-        alternate = bleachPoint$alternate
+        bleach = unlist(bleachPoint$bleach)
+        alternate = unlist(bleachPoint$alternate)
         
         # pre-Bleach slider to bleach
         if(!(is.null(input$Btime))){ 
@@ -427,7 +445,7 @@ shinyServer(
         
         #correlation factor
         #all values devided by first post bleach integer of CTRL
-        cfm2 = mx2/mx2[bleach+1]
+        cfm2 = mx2/mx2[bleach]
         
         if(!(is.null(input$Btime))){
           if(input$Btime == 3 | !(is.null(alternate)) & input$action) {
@@ -472,10 +490,10 @@ shinyServer(
         #FRAP formula: http://www.embl.de/eamnet/downloads/courses/FRAP2005/tzimmermann_frap.pdf
         # the Formeula is: f(t) = A(1-exp(-tau*t)) where t1,2 = ln0.5/-tau
         
-        tm = tail(t,length(t)-bleach)
+        tm = tail(t,length(t)-(bleach-1))
         tm = tm - tm[1]
         
-        mxxp1m = tail(mxxp1,length(mxxp1)-bleach)
+        mxxp1m = tail(mxxp1,length(mxxp1)-(bleach-1))
         # c is minimum observed value of all measurements - needed for fitting
         c = min(mxxp1m)
         # b is the range of values (from 100%-x%) - also called data span of FRAP values
@@ -490,22 +508,9 @@ shinyServer(
         
         #make data.frame for further analysis with post bleach values
         mxf = data.frame(tm,mxxp1m,b,c)
-        
+        fit = fittingFunction(mxf)
         # levenberg marquard algorithm
-        if(input$fit == 3 & input$action){
-            formulaInput = input$customFormula
-            formulaChoice = as.formula(paste("mxxp1m ~",formulaInput))
-              if(length(grep("x2",formulaInput))>=1){
-                  fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.01,x2=0.01)) 
-            } else {
-                  fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.05)) 
-            }
-        } else if(input$fit == 2){
-          fit = nlsLM(mxxp1m ~ bs*(1-exp(-x*tm))+bs2*(1-exp(-x2*tm))+c, data = mxf, start =list(bs=0.5,bs2 = 1,x=0.05,x2=0.1))
-        } else {
-          formulaChoice = as.formula("mxxp1m ~ b*(1-exp(-x*tm))+c")
-          fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.001))
-        }
+        
         
         if(!is.null(summary(fit)$sigma)){
           r = summary(fit)$sigma
@@ -516,9 +521,9 @@ shinyServer(
         timeCoeff = input$t*0.001
         tm = tm*timeCoeff
         
-        m1m = tail(m1,length(m1)-bleach)
-        m2m = tail(m2,length(m2)-bleach)
-        m3m = tail(m3,length(m3)-bleach)
+        m1m = tail(m1,length(m1)-(bleach-1))
+        m2m = tail(m2,length(m2)-(bleach-1))
+        m3m = tail(m3,length(m3)-(bleach-1))
        
         # show fit
         fitpre = predict(fit)
@@ -620,11 +625,8 @@ shinyServer(
       # adding data together for ggplot2
       
       p1 = data.frame(mxxp1m,tm,fitpre,diff,m1m,m2m,m3m)
-      
-      if(length(sctn)>3){
       p2 = data.frame(tScatterVector,sNumber,t12)
-      # p3 = data.frame()
-      }
+      
       
       # data explorer
       ## graph plot code - if fitting quality is bad, no fitting difference plot is shown (sigma value)
