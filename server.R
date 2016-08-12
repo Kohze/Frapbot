@@ -322,7 +322,7 @@ shinyServer(
         fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.001))
       }
       return(fit)
-    }  
+    }
     
     output$main2 <- renderPlot({
       d = d()
@@ -489,7 +489,6 @@ shinyServer(
         
         #FRAP formula: http://www.embl.de/eamnet/downloads/courses/FRAP2005/tzimmermann_frap.pdf
         # the Formeula is: f(t) = A(1-exp(-tau*t)) where t1,2 = ln0.5/-tau
-        
         tm = tail(t,length(t)-(bleach-1))
         tm = tm - tm[1]
         
@@ -502,15 +501,11 @@ shinyServer(
         b = b[1]
         c = c[1]
         
-        # command line output for tests
-        #cat(c("start",min(mxxp1m),b,c,"end"), file=stderr())
-        #cat(c("P",length(tm),"t12",length(mxxp1m),length(b),length(c),"/n","PS"), file=stderr())
-        
         #make data.frame for further analysis with post bleach values
         mxf = data.frame(tm,mxxp1m,b,c)
-        fit = fittingFunction(mxf)
-        # levenberg marquard algorithm
         
+        # levenberg marquard algorithm
+        fit = fittingFunction(mxf)
         
         if(!is.null(summary(fit)$sigma)){
           r = summary(fit)$sigma
@@ -570,57 +565,65 @@ shinyServer(
       tHalf = c()
       fitQuality = c()
       allFits = c()
+  
       
       if(!is.null(d())){
         for(i in 1:(length(sctn)-1)){
-          matrixH = ScatterPlot(d(),i)
-          
-          tHalf = c(c(tHalf),matrixH[["half time"]])
-          fitQuality = c(c(fitQuality),matrixH[["quality"]])
-          
-          if(is.null(allFits)){
-            allFits = cbind(matrixH[["tm"]],matrixH[["fitpre"]])
+          if(!exists("matrixH")) {
+            matrixH = list()
+            matrixH[i] = list(ScatterPlot(d(),i))
           } else {
-            allFits = cbind(allFits,matrixH[["fitpre"]])
-          }
-          
-          if(choice == i){
-            t12 = matrixH[["half time"]]
-            t122 = matrixH[["half time2"]]
-            rif2 = matrixH[["quality"]]
-            
-            #unprocessed ROI means
-            m1m = matrixH[["m1m"]]
-            m2m = matrixH[["m2m"]]
-            m3m = matrixH[["m3m"]]
-            
-            #names of areas
-            m1Name = matrixH[["name-m1"]]
-            m2Name = matrixH[["name-m2"]]
-            m3Name = matrixH[["name-m3"]]
-            a1Name = matrixH[["names-a1"]]
-            
-            diff = matrixH[["diff"]]
-            fitpre = matrixH[["fitpre"]]
-            tm = matrixH[["tm"]]
-            mxxp1m = matrixH[["mxxp1m"]]
-            
-            tau=matrixH[["tau"]]
-            tau2 = matrixH[["tau2"]]
-            
-            D = matrixH[["diffusion"]]
-            D2 = matrixH[["diffusion2"]]
-            bleach = matrixH[["bleach"]]
+            matrixH[i] = append(matrixH,ScatterPlot(d(),i))
           }
         }
+      }
         
+      for(i in 1:(length(sctn)-1)){ 
+        
+          tHalf = c(c(tHalf),matrixH[[i]][["half time"]])
+          fitQuality = c(c(fitQuality),matrixH[[i]][["quality"]])
+          
+          if(is.null(allFits)){
+            allFits = cbind(matrixH[["tm"]],matrixH[[i]][["fitpre"]])
+          } else {
+            allFits = cbind(allFits,matrixH[[i]][["fitpre"]])
+          }
+      }    
+      
+        t12 = matrixH[[input$SlChoice]][["half time"]]
+        t122 = matrixH[[input$SlChoice]][["half time2"]]
+        rif2 = matrixH[[input$SlChoice]][["quality"]]
+        
+        #unprocessed ROI means
+        m1m = matrixH[[input$SlChoice]][["m1m"]]
+        m2m = matrixH[[input$SlChoice]][["m2m"]]
+        m3m = matrixH[[input$SlChoice]][["m3m"]]
+        
+        #names of areas
+        m1Name = matrixH[[input$SlChoice]][["name-m1"]]
+        m2Name = matrixH[[input$SlChoice]][["name-m2"]]
+        m3Name = matrixH[[input$SlChoice]][["name-m3"]]
+        a1Name = matrixH[[input$SlChoice]][["names-a1"]]
+        
+        diff = matrixH[[input$SlChoice]][["diff"]]
+        fitpre = matrixH[[input$SlChoice]][["fitpre"]]
+        tm = matrixH[[input$SlChoice]][["tm"]]
+        mxxp1m = matrixH[[input$SlChoice]][["mxxp1m"]]
+        
+        tau=matrixH[[input$SlChoice]][["tau"]]
+        tau2 = matrixH[[input$SlChoice]][["tau2"]]
+        
+        D = matrixH[[input$SlChoice]][["diffusion"]]
+        D2 = matrixH[[input$SlChoice]][["diffusion2"]]
+        bleach = matrixH[[input$SlChoice]][["bleach"]]
+          
         halfTimeGlobal <<- tHalf
         allFitsTable <<- allFits 
         
         tHalf = tHalf
         tScatterVector = tHalf
         sNumber = rep("all fittings",length(tScatterVector))
-      }
+      
       
       # adding data together for ggplot2
       
