@@ -222,8 +222,7 @@ shinyServer(
           return(FALSE)
         }
       }
-      
-      
+    
       extractRegion = function(d){
         if (!(head(d,1) == tail(d,1)) & !head(d,1)%%1 == 0) {
           return(TRUE)
@@ -239,7 +238,6 @@ shinyServer(
       region = d[which(regionCol == TRUE)]
       
       return(data.frame(t,region))
-      
     }
     
     slopeInc <- function(x){
@@ -362,10 +360,8 @@ shinyServer(
         #Mean1 = Bleach Region; Mean2 = Control Region; Mean3 = Background; Area1 = Bleach Area
         
         ### the automatic row to area/signal finding sub-routine
-     
         ms = matrix(nrow = nrow(d))
         
-       
         for (i in 1:ncol(d)) {
           if (d[1,i]+2 == d[3,i]) {
             ## input scan time to t algorithm
@@ -390,7 +386,6 @@ shinyServer(
 
         # variables from the auto finder need to be unlisted (to a vector) to proceed
         # manual selection of ROI  
-        
         if(!(is.null(input$ROI)) & !(is.null(d())) & !(is.null(m2))){
           if(input$ROI == 2 & input$action){
             input$action
@@ -566,7 +561,6 @@ shinyServer(
       fitQuality = c()
       allFits = c()
   
-      
       if(!is.null(d())){
         for(i in 1:(length(sctn)-1)){
           if(!exists("matrixH")) {
@@ -588,49 +582,48 @@ shinyServer(
           } else {
             allFits = cbind(allFits,matrixH[[i]][["fitpre"]])
           }
-      }    
-      
-        t12 = matrixH[[input$SlChoice]][["half time"]]
-        t122 = matrixH[[input$SlChoice]][["half time2"]]
-        rif2 = matrixH[[input$SlChoice]][["quality"]]
-        
-        #unprocessed ROI means
-        m1m = matrixH[[input$SlChoice]][["m1m"]]
-        m2m = matrixH[[input$SlChoice]][["m2m"]]
-        m3m = matrixH[[input$SlChoice]][["m3m"]]
-        
-        #names of areas
-        m1Name = matrixH[[input$SlChoice]][["name-m1"]]
-        m2Name = matrixH[[input$SlChoice]][["name-m2"]]
-        m3Name = matrixH[[input$SlChoice]][["name-m3"]]
-        a1Name = matrixH[[input$SlChoice]][["names-a1"]]
-        
-        diff = matrixH[[input$SlChoice]][["diff"]]
-        fitpre = matrixH[[input$SlChoice]][["fitpre"]]
-        tm = matrixH[[input$SlChoice]][["tm"]]
-        mxxp1m = matrixH[[input$SlChoice]][["mxxp1m"]]
-        
-        tau=matrixH[[input$SlChoice]][["tau"]]
-        tau2 = matrixH[[input$SlChoice]][["tau2"]]
-        
-        D = matrixH[[input$SlChoice]][["diffusion"]]
-        D2 = matrixH[[input$SlChoice]][["diffusion2"]]
-        bleach = matrixH[[input$SlChoice]][["bleach"]]
           
-        halfTimeGlobal <<- tHalf
-        allFitsTable <<- allFits 
-        
-        tHalf = tHalf
-        tScatterVector = tHalf
-        sNumber = rep("all fittings",length(tScatterVector))
       
+      t12 = matrixH[[i]][["half time"]]
+      t122 = matrixH[[i]][["half time2"]]
+      rif2 = matrixH[[i]][["quality"]]
+      
+      #unprocessed ROI means
+      m1m = matrixH[[i]][["m1m"]]
+      m2m = matrixH[[i]][["m2m"]]
+      m3m = matrixH[[i]][["m3m"]]
+      
+      #names of areas
+      m1Name = matrixH[[i]][["name-m1"]]
+      m2Name = matrixH[[i]][["name-m2"]]
+      m3Name = matrixH[[i]][["name-m3"]]
+      a1Name = matrixH[[i]][["names-a1"]]
+      
+      diff = matrixH[[i]][["diff"]]
+      fitpre = matrixH[[i]][["fitpre"]]
+      tm = matrixH[[i]][["tm"]]
+      mxxp1m = matrixH[[i]][["mxxp1m"]]
+      
+      tau=matrixH[[i]][["tau"]]
+      tau2 = matrixH[[i]][["tau2"]]
+      
+      D = matrixH[[i]][["diffusion"]]
+      D2 = matrixH[[i]][["diffusion2"]]
+      bleach = matrixH[[i]][["bleach"]]
+        
+      
+      halfTimeGlobal <<- tHalf
+      allFitsTable <<- allFits 
+      
+      tHalf = tHalf
+      tScatterVector = tHalf
+      sNumber = rep("all fittings",length(tScatterVector))
       
       # adding data together for ggplot2
       
       p1 = data.frame(mxxp1m,tm,fitpre,diff,m1m,m2m,m3m)
       p2 = data.frame(tScatterVector,sNumber,t12)
-      
-      
+    
       # data explorer
       ## graph plot code - if fitting quality is bad, no fitting difference plot is shown (sigma value)
       
@@ -780,6 +773,7 @@ shinyServer(
           h5("Standart Error:",round((rif2),4))
           )}
       })
+      } 
     }
     )
   }
