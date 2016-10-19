@@ -1,0 +1,9 @@
+name: Frapbot2
+account: frapbotbeta
+server: shinyapps.io
+appId: 121304
+bundleId: 537320
+url: https://frapbotbeta.shinyapps.io/Frapbot2/
+when: 1471821180.50987
+asMultiple: FALSE
+asStatic: FALSE

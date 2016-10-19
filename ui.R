@@ -20,7 +20,7 @@ shinyUI(fluidPage(
                                  fluidRow(
                                    column(3,
                               wellPanel(
-                                fileInput('file','Frapbot 1.2: Choose CSV File', multiple=TRUE),
+                                fileInput('file','Frapbot 1.7: Choose CSV File', multiple=TRUE),
                                 uiOutput("dataSetChoice"),
                                 uiOutput("qualitySlider"),
                                 uiOutput("noBackground"),

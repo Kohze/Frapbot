@@ -3,11 +3,11 @@
 library(ggplot2)
 library(shiny)
 library(minpack.lm)
-library(dplyr)
 library(Cairo)
 library(grid)
 library(DT)
-library(data.table)
+library(dtplyr)
+library(dplyr)
 
 options(shiny.usecairo=T)
 options(shiny.autoreload.interval = 200)
@@ -82,9 +82,10 @@ shinyServer(
     output$downloadData <- downloadHandler(
       filename = 'FrapBot.zip',
       content = function(fname) {
-        fs <- c("Fitted_Curves.csv", "Half_Time.csv")
+        fs <- c("Fitted_Curves.csv", "Half_Time.csv", "sumOfRows.csv")
         write.csv(allFitsTable, file = "Fitted_Curves.csv", sep =",")
         write.csv(halfTimeGlobal, file = "Half_Time.csv", sep =",")
+        write.csv(sumOfRows, file = "sumOfRows.csv", sep =",")
         
         zip(zipfile=fname, files=fs)
         if(file.exists(paste0(fname, ".zip"))) {file.rename(paste0(fname, ".zip"), fname)}
@@ -129,11 +130,7 @@ shinyServer(
     output$dataSetChoice <- renderUI({
       if(is.null(d())){return()}
       d = d()
-      for (i in 1:ncol(d)) {
-        if (d[1,i]+2 == d[3,i]) {
-          sc = d[i]
-        } 
-      }
+      sc = findCountCol(d)
       sc1b = rbind(tail(sc,nrow(sc)-1),tail(sc,1))
       sct = sc-sc1b
       sctn = c(0,c(which(sct>2)),nrow(sc))
@@ -216,7 +213,7 @@ shinyServer(
     extractCols <- function(d){
       
       extractTimeCol = function(d){
-        if (d[1]+2 == d[3]) {
+        if (d[1]+2 == d[3] && d[4]+2 == d[6] && d[6]+2 == d[8]) {
           return(TRUE)
         } else { 
           return(FALSE)
@@ -248,6 +245,7 @@ shinyServer(
       return(max(x)-min(x))
     }
     
+    #the main pattern recognition
     assignCols <- function(x, withBG = TRUE){
       analysisFrame = data.table(
         "name" = names(x), 
@@ -257,7 +255,7 @@ shinyServer(
         )
     
       firstSort = head(analysisFrame[order(-sum)],2)
-      firstSort[,mult := range*slope]
+      firstSort[,mult := range*(slope^2)*sum]
       firstSort = firstSort[order(-mult)]
       
       ControlROIname = firstSort[2]$name
@@ -273,21 +271,20 @@ shinyServer(
         BGROI = FALSE
       }
       
-      namesOfInp = names(x)
-      columnFinder = which(BleachROIname == namesOfInp)
-      areaName = namesOfInp[columnFinder-1]
-      areaCOL = x[[areaName]]
-      
-      output = list("ConROI" = ControlROI, "BleROI" = BleachROI, "BgROI" = BGROI, "AreaCOL" = areaCOL)
+      output = list("ConROI" = ControlROI, "BleROI" = BleachROI , "BgROI" = BGROI, "AreaCOL" = BleachROIname)
       return(output)
     } 
     
     findCountCol <- function(d){
+      if(length(d) > 4) {
       for (i in 1:(ncol(d))) {
-        if (d[1,i]+2 == d[3,i]) {
+        if (d[1,i]+2 == d[3,i] && d[4,i]+2 == d[6,i] && d[6,i]+2 == d[8,i]) {
           sc = d[i]
         }
       }
+      } else {
+        sc = d[1]
+      }  
       return(sc)
     }
     
@@ -322,6 +319,22 @@ shinyServer(
       return(fit)
     }
     
+    #function to take care of traces with different length
+    cbind.fill <- function(...){
+      nm <- list(...) 
+      nm <- lapply(nm, as.matrix)
+      n <- max(sapply(nm, nrow)) 
+      do.call(cbind, lapply(nm, function (x) 
+        rbind(x, matrix(, n-nrow(x), ncol(x))))) 
+    }
+    
+    merged_list <- function(x){
+      x[,1] = 0
+      x[,2] = 0
+      output = rowSums(x)
+      return(output)
+    }
+    
     output$main2 <- renderPlot({
       d = d()
       sc = findCountCol(d)
@@ -336,15 +349,17 @@ shinyServer(
         sc1b = rbind(tail(sc,nrow(sc)-1),tail(sc,1))
         sct = sc-sc1b
         sctn = c(0,c(which(sct>2)),nrow(sc))
-        if(length(sctn)>2) {
-          d = d[(sctn[choice]+1):(sctn[choice+1]),]
-        }
-      } 
+      }
       
       #main function
       ScatterPlot <- function(Data,FileChoice){
         
         d = Data
+        if(length(d) == 4) {
+          sc = d[1]
+        } else {
+          sc = findCountCol(d)
+        }
         alternate = NULL
         
         if(!(is.null(sc) & !(is.null(input$SlChoice)))){
@@ -354,7 +369,7 @@ shinyServer(
           if(length(sctn)>2) {
             d = d[(sctn[FileChoice]+1):(sctn[FileChoice+1]),]
           }
-        } 
+        }
         
         #convert datasets into variable
         #Mean1 = Bleach Region; Mean2 = Control Region; Mean3 = Background; Area1 = Bleach Area
@@ -362,27 +377,44 @@ shinyServer(
         ### the automatic row to area/signal finding sub-routine
         ms = matrix(nrow = nrow(d))
         
-        for (i in 1:ncol(d)) {
-          if (d[1,i]+2 == d[3,i]) {
-            ## input scan time to t algorithm
-            t = d[i]
+        if(ncol(d) > 4) {
+          for (i in 1:ncol(d)) {
+            if (d[1,i]+2 == d[3,i] && d[4,i]+2 == d[6,i] && d[6,i]+2 == d[8,i]) {
+              ## input scan time to t algorithm
+              t = d[i]
+            }
+            if(!(head(d[i],1) == tail(d[i],1)) && !head(d[i],1)%%1 == 0) {
+              ms = ifelse(exists("ms"), cbind(ms,d[i]), matrix(nrow = nrow(d)))
+              #ms = cbind(ms,d[i])
+            }
           }
-          if(!(head(d[i],1) == tail(d[i],1)) & !head(d[i],1)%%1 == 0 ) {
-            ms = ifelse(exists("ms"), cbind(ms,d[i]), matrix(nrow = nrow(d)))
-            #ms = cbind(ms,d[i])
-          }
-        }
+        } else {
+          t = d[1]
+        }  
 
         #deleting the NA in the matrix colunm 1
-        m = extractCols(d)
-       
-        t = m[1]
-        colList = assignCols(m[2:4])
+        if(ncol(d) > 4) {
+          m = extractCols(d)
+        } else {
+          m = d
+        }
         
-        m3 = colList[["BleROI"]]
+        colList = assignCols(m[2:4])
+       
+        if(ncol(d) > 4){
+        namesOfInp = names(d)
+        nameMean1 = colList$AreaCOL
+        columnFinder = which(nameMean1 == namesOfInp)
+        areaName = namesOfInp[columnFinder-1]
+        a1 = d[[areaName]]
+        } else {
+          a1 = 1
+        }
+        t = m[1]
+       
+        m3 = colList[["BgROI"]]
         m2 = colList[["ConROI"]]
-        m1 = colList[["BgROI"]]
-        a1 = colList[["AreaCol"]]
+        m1 = colList[["BleROI"]]
 
         # variables from the auto finder need to be unlisted (to a vector) to proceed
         # manual selection of ROI  
@@ -390,9 +422,9 @@ shinyServer(
           if(input$ROI == 2 & input$action){
             input$action
             isolate({
-              m1 = unlist(d[,input$bgROI])
+              m1 = unlist(d[,input$bleachROIin])
               m2 = unlist(d[,input$controlROIin])
-              m3 = unlist(d[,input$bleachROIin])
+              m3 = unlist(d[,input$bgROI])
               a1 = unlist(d[,input$areaROI])
               t = unlist(t)
             }) 
@@ -484,6 +516,7 @@ shinyServer(
         
         #FRAP formula: http://www.embl.de/eamnet/downloads/courses/FRAP2005/tzimmermann_frap.pdf
         # the Formeula is: f(t) = A(1-exp(-tau*t)) where t1,2 = ln0.5/-tau
+        
         tm = tail(t,length(t)-(bleach-1))
         tm = tm - tm[1]
         
@@ -496,11 +529,15 @@ shinyServer(
         b = b[1]
         c = c[1]
         
+        # command line output for tests
+        #cat(c("start",min(mxxp1m),b,c,"end"), file=stderr())
+        #cat(c("P",length(tm),"t12",length(mxxp1m),length(b),length(c),"/n","PS"), file=stderr())
+        
         #make data.frame for further analysis with post bleach values
         mxf = data.frame(tm,mxxp1m,b,c)
-        
-        # levenberg marquard algorithm
         fit = fittingFunction(mxf)
+        # levenberg marquard algorithm
+        
         
         if(!is.null(summary(fit)$sigma)){
           r = summary(fit)$sigma
@@ -560,65 +597,62 @@ shinyServer(
       tHalf = c()
       fitQuality = c()
       allFits = c()
-  
+
       if(!is.null(d())){
         for(i in 1:(length(sctn)-1)){
-          if(!exists("matrixH")) {
-            matrixH = list()
-            matrixH[i] = list(ScatterPlot(d(),i))
-          } else {
-            matrixH[i] = append(matrixH,ScatterPlot(d(),i))
-          }
-        }
-      }
-        
-      for(i in 1:(length(sctn)-1)){ 
-        
-          tHalf = c(c(tHalf),matrixH[[i]][["half time"]])
-          fitQuality = c(c(fitQuality),matrixH[[i]][["quality"]])
+          matrixH = ScatterPlot(d(),i)
+          
+          tHalf = c(c(tHalf),matrixH[["half time"]])
+          fitQuality = c(c(fitQuality),matrixH[["quality"]])
           
           if(is.null(allFits)){
-            allFits = cbind(matrixH[["tm"]],matrixH[[i]][["fitpre"]])
+            allFits = cbind(matrixH[["tm"]],matrixH[["fitpre"]])
           } else {
-            allFits = cbind(allFits,matrixH[[i]][["fitpre"]])
+            #allFits = cbind(allFits,matrixH[["fitpre"]])
+            allFits = cbind.fill(allFits,matrixH[["fitpre"]])
           }
           
-      
-      t12 = matrixH[[i]][["half time"]]
-      t122 = matrixH[[i]][["half time2"]]
-      rif2 = matrixH[[i]][["quality"]]
-      
-      #unprocessed ROI means
-      m1m = matrixH[[i]][["m1m"]]
-      m2m = matrixH[[i]][["m2m"]]
-      m3m = matrixH[[i]][["m3m"]]
-      
-      #names of areas
-      m1Name = matrixH[[i]][["name-m1"]]
-      m2Name = matrixH[[i]][["name-m2"]]
-      m3Name = matrixH[[i]][["name-m3"]]
-      a1Name = matrixH[[i]][["names-a1"]]
-      
-      diff = matrixH[[i]][["diff"]]
-      fitpre = matrixH[[i]][["fitpre"]]
-      tm = matrixH[[i]][["tm"]]
-      mxxp1m = matrixH[[i]][["mxxp1m"]]
-      
-      tau=matrixH[[i]][["tau"]]
-      tau2 = matrixH[[i]][["tau2"]]
-      
-      D = matrixH[[i]][["diffusion"]]
-      D2 = matrixH[[i]][["diffusion2"]]
-      bleach = matrixH[[i]][["bleach"]]
-        
-      
-      halfTimeGlobal <<- tHalf
-      allFitsTable <<- allFits 
-      
       tHalf = tHalf
       tScatterVector = tHalf
       sNumber = rep("all fittings",length(tScatterVector))
-      
+          if(choice == i){
+            t12 = matrixH[["half time"]]
+            t122 = matrixH[["half time2"]]
+            rif2 = matrixH[["quality"]]
+            
+            #unprocessed ROI means
+            m1m = matrixH[["m1m"]]
+            m2m = matrixH[["m2m"]]
+            m3m = matrixH[["m3m"]]
+            
+            #names of areas
+            m1Name = matrixH[["name-m1"]]
+            m2Name = matrixH[["name-m2"]]
+            m3Name = matrixH[["name-m3"]]
+            a1Name = matrixH[["names-a1"]]
+            
+            diff = matrixH[["diff"]]
+            fitpre = matrixH[["fitpre"]]
+            tm = matrixH[["tm"]]
+            mxxp1m = matrixH[["mxxp1m"]]
+            
+            tau=matrixH[["tau"]]
+            tau2 = matrixH[["tau2"]]
+            
+            D = matrixH[["diffusion"]]
+            D2 = matrixH[["diffusion2"]]
+            bleach = matrixH[["bleach"]]
+          }
+        }
+        
+        sumOfRows <<- merged_list(allFits)
+        halfTimeGlobal <<- tHalf
+        allFitsTable <<- allFits 
+        
+        tScatterVector = tHalf
+        sNumber = rep("all fittings",length(tScatterVector))
+      }
+
       # adding data together for ggplot2
       
       p1 = data.frame(mxxp1m,tm,fitpre,diff,m1m,m2m,m3m)
@@ -627,7 +661,7 @@ shinyServer(
       # data explorer
       ## graph plot code - if fitting quality is bad, no fitting difference plot is shown (sigma value)
       
-      if(rif2>=input$quality){
+      if(rif2 >= input$quality){
         adv <- ggplot(p1,aes(y=mxxp1m,x=tm))+geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.3)+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.7,linetype=3)
         adv <- adv+geom_abline(intercept=1,slope=0,alpha=0.7,size=0.8,linetype=3)+geom_point()+geom_path(alpha=0.3)
         adv <- adv+geom_path(x = tm, y = fitpre,alpha=0.7, color="steelblue3",linetype=1,size=1.2)+expand_limits(y= c(0,1.1))
@@ -652,7 +686,7 @@ shinyServer(
         }
       }
       
-      if(rif2<input$quality) {
+      if(rif2 < input$quality) {
         adv <- ggplot(p1,aes(y=mxxp1m,x=tm))+geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.3)+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.7,linetype=3)
         adv <- adv+geom_abline(intercept=1,slope=0,alpha=0.7,size=0.8,linetype=3)+geom_point()+geom_path(alpha=0.3)
         adv <- adv+expand_limits(y= c(0,1.1))
@@ -773,7 +807,7 @@ shinyServer(
           h5("Standart Error:",round((rif2),4))
           )}
       })
-      } 
+       
     }
     )
   }
