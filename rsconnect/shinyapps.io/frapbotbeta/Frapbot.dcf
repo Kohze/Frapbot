@@ -1,10 +1,11 @@
 name: Frapbot
+title:
 account: frapbotbeta
 server: shinyapps.io
 appId: 121305
-bundleId: 581530
+bundleId: 706804
 url: https://frapbotbeta.shinyapps.io/Frapbot/
-when: 1476050536.55981
+when: 1486705527.38418
 asMultiple: FALSE
 asStatic: FALSE
 ignoredFiles: manifest.json

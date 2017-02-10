@@ -1,0 +1,116 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>  <script type="application/shiny-singletons"></script>  <script type="application/html-dependencies">json2[2014.02.04];jquery[1.12.4];babel-polyfill[6.7.2];shiny[0.14.2];htmlwidgets[0.8];datatables-binding[0.2];bootstrap[3.3.7]</script><script src="shared/json2-min.js"></script>
+<script src="shared/jquery.min.js"></script>
+<script src="shared/babel-polyfill.min.js"></script>
+<link href="shared/shiny.css" rel="stylesheet" />
+<script src="shared/shiny.min.js"></script>
+<script src="htmlwidgets-0.8/htmlwidgets.js"></script>
+<script src="datatables-binding-0.2/datatables.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="shared/bootstrap/css/bootstrap.min.css" rel="stylesheet" />
+<script src="shared/bootstrap/js/bootstrap.min.js"></script>
+<script src="shared/bootstrap/shim/html5shiv.min.js"></script>
+<script src="shared/bootstrap/shim/respond.min.js"></script>
+
+</head>
+
+<body>
+  <div class="container-fluid">
+    <style>
+     body {
+     font-family: Roboto;
+     }
+    </style>
+    <div class="row">
+      <div class="col-sm-12">
+        <div class="row">
+          <div class="col-sm-3" style="padding: 0px;">
+            <div class="well">
+              <div class="form-group shiny-input-container" style="margin-bottom: 0px;">
+                <label>Frapbot 1.8: Choose a CSV File</label>
+                <div class="input-group">
+                  <label class="input-group-btn">
+                    <span class="btn btn-default btn-file">
+                      Browse...
+                      <input id="file" name="file" type="file" style="display: none;" multiple="multiple"/>
+                    </span>
+                  </label>
+                  <input type="text" class="form-control" placeholder="No file selected" readonly="readonly"/>
+                </div>
+                <div id="file_progress" class="progress progress-striped active shiny-file-input-progress">
+                  <div class="progress-bar"></div>
+                </div>
+              </div>
+              <div id="dataSetChoice" class="shiny-html-output"></div>
+              <div id="qualitySlider" class="shiny-html-output"></div>
+              <div id="noBackground" class="shiny-html-output"></div>
+              <div id="norm" class="shiny-html-output"></div>
+              <div id="normSlider" class="shiny-html-output"></div>
+              <div id="fitting" class="shiny-html-output"></div>
+              <div id="ownFormula" class="shiny-html-output"></div>
+              <div id="bleachTime" class="shiny-html-output"></div>
+              <div id="manualInput" class="shiny-html-output"></div>
+              <div id="mbleachTime" class="shiny-html-output"></div>
+              <div id="automaticROI" class="shiny-html-output"></div>
+              <div class="shiny-split-layout">
+                <div style="width: 50.000%;">
+                  <div id="bleachROI" class="shiny-html-output"></div>
+                </div>
+                <div style="width: 50.000%;">
+                  <div id="controlROI" class="shiny-html-output"></div>
+                </div>
+              </div>
+              <div class="shiny-split-layout">
+                <div style="width: 50.000%;">
+                  <div id="bgROI" class="shiny-html-output"></div>
+                </div>
+                <div style="width: 50.000%;">
+                  <div id="areaROI" class="shiny-html-output"></div>
+                </div>
+              </div>
+              <div id="COlumns" class="shiny-html-output"></div>
+              <div id="scanTime" class="shiny-html-output"></div>
+              <div id="Columns1" class="shiny-html-output"></div>
+              <br/>
+              <div class="shiny-split-layout">
+                <div style="width: 50.000%;">
+                  <div id="update1" class="shiny-html-output"></div>
+                </div>
+                <div style="width: 50.000%;">
+                  <div id="update2" class="shiny-html-output"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-9">
+            <div class="row">
+              <div class="col-sm-12">
+                <div id="mainOutput" class="shiny-html-output" height="800px"></div>
+              </div>
+              <div id="spacingLine" class="shiny-html-output"></div>
+              <div class="col-sm-1"></div>
+              <div class="col-sm-3">
+                <div id="resultOutput" class="shiny-html-output"></div>
+              </div>
+              <div class="col-sm-4">
+                <div id="resultOutput2" class="shiny-html-output"></div>
+              </div>
+              <div class="col-sm-4">
+                <div id="resultOutput3" class="shiny-html-output"></div>
+              </div>
+            </div>
+            <div id="spacingLine2" class="shiny-html-output"></div>
+            <br/>
+            <div id="contents" style="width:100%; height:auto; " class="datatables html-widget html-widget-output"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>
