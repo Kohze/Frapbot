@@ -1,4 +1,4 @@
-#frapbot 1.1
+#frapbot 1.9
 # server.R
 library(ggplot2)
 library(shiny)
@@ -68,8 +68,8 @@ shinyServer(
     output$mainOutput <- renderUI({
       if(is.null(d())){return()}
       tabsetPanel(
-        tabPanel("Frap Plot",plotOutput("main2")),
-        tabPanel("Dataset")
+        tabPanel("Frapbot 1.9",plotOutput("main2")),
+        tabPanel("")
         ,id = "mainPanel")
     })
     
@@ -96,7 +96,7 @@ shinyServer(
     
     output$qualitySlider <- renderUI ({
       if(is.null(d())){return()}
-      sliderInput("quality","Standart Error Slider",0.0,1.0,0.9)
+      sliderInput("quality","Standart Error Slider (quality filter)",0.0,1.0,0.9)
     })
     
     output$update2 <- renderUI ({
@@ -172,7 +172,7 @@ shinyServer(
     
     output$scanTime <- renderUI({
       if(is.null(d())){return()}
-        sliderInput("t","Scan Time in ms", 1,1000,79)
+        sliderInput("t","Scan time in ms", 1,1000,79)
     })
     
     output$contents <- DT::renderDataTable({
