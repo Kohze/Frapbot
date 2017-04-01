@@ -312,7 +312,7 @@ shinyServer(
           fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.05)) 
         }
       } else if(input$fit == 2){
-        fit = nlsLM(mxxp1m ~ bs*(1-exp(-x*tm))+bs2*(1-exp(-x2*tm))+c, data = mxf, start =list(bs=0.5,bs2 = 1,x=0.05,x2=0.1))
+        fit = nlsLM(mxxp1m ~ -(bs1*exp(-x*tm))-((bs2)*exp(-x2*tm))+c1, data = mxf, start = list(bs1 = 1, bs2 = 0.1, x = 0.1, x2 = 4, c1 = 0.2), lower = c(0,0,0,0,0), control = list(maxiter = 1024))
       } else {
         formulaChoice = as.formula("mxxp1m ~ b*(1-exp(-x*tm))+c")
         fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.001))
@@ -403,13 +403,15 @@ shinyServer(
         colList = assignCols(m[2:4])
        
         if(ncol(d) > 4){
-        namesOfInp = names(d)
-        nameMean1 = colList$AreaCOL
-        columnFinder = which(nameMean1 == namesOfInp)
-        areaName = namesOfInp[columnFinder-1]
-        a1 = d[[areaName]]
+          namesOfInp = names(d)
+          nameMean1 = colList$AreaCOL
+          columnFinder = which(nameMean1 == namesOfInp)
+          areaName = namesOfInp[columnFinder-1]
+          a1 = d[[areaName]]
+          has4col = FALSE
         } else {
           a1 = 1
+          has4col = TRUE
         }
         t = m[1]
        
@@ -515,9 +517,6 @@ shinyServer(
           }
         } 
         
-        #FRAP formula: http://www.embl.de/eamnet/downloads/courses/FRAP2005/tzimmermann_frap.pdf
-        # the Formeula is: f(t) = A(1-exp(-tau*t)) where t1,2 = ln0.5/-tau
-        
         tm = tail(t,length(t)-(bleach-1))
         tm = tm - tm[1]
         
@@ -546,8 +545,13 @@ shinyServer(
         }
         
         # adjusting for the input time - was set behind the fitting to reduce singularities
-        timeCoeff = input$t*0.001
-        tm = tm*timeCoeff
+        if(has4col){
+          timeCoeff = 1
+        } else {
+          timeCoeff = input$t*0.001
+          tm = tm*timeCoeff
+        }
+        
         
         m1m = tail(m1,length(m1)-(bleach-1))
         m2m = tail(m2,length(m2)-(bleach-1))
@@ -657,13 +661,17 @@ shinyServer(
       # adding data together for ggplot2
       
       p1 = data.frame(mxxp1m,tm,fitpre,diff,m1m,m2m,m3m)
-      p2 = data.frame(tScatterVector,sNumber,t12)
-    
-      # data explorer
-      ## graph plot code - if fitting quality is bad, no fitting difference plot is shown (sigma value)
+      
+      if(t122 == FALSE) {
+        p2 = data.frame(tScatterVector,sNumber,t12)
+      } else {
+        p2_1 = data.frame(tScatterVector,sNumber,"t12" = t12, "group" = "t1/2 1")
+        p2_2 = data.frame(tScatterVector,sNumber,"t12" = t122, "group" = "t1/2 2")
+        p2 = rbind(p2_1,p2_2)
+      }
       
       if(rif2 >= input$quality){
-        adv <- ggplot(p1,aes(y=mxxp1m,x=tm))+geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.3)+geom_abline(intercept=0,slope=0,size=0.8,alpha=0.7,linetype=3)
+        adv <- ggplot(p1,aes(y=mxxp1m,x=tm)) +geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.3)+geom_abline(intercept=0,slope=0, size=0.8, alpha=0.7,linetype=3)
         adv <- adv+geom_abline(intercept=1,slope=0,alpha=0.7,size=0.8,linetype=3)+geom_point()+geom_path(alpha=0.3)
         adv <- adv+geom_path(x = tm, y = fitpre,alpha=0.7, color="steelblue3",linetype=1,size=1.2)+expand_limits(y= c(0,1.1))
         adv <- adv+theme(aspect.ratio=0.35)+xlab("time in sec")+ylab("relative signal")
@@ -679,9 +687,15 @@ shinyServer(
         cdv <- cdv+xlab("time in sec")+ylab("signal")
         
         if(length(sctn)>3){
-          edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
-          edv <- edv + geom_point(data=p2, aes(y=t12, x=sNumber), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
-          multiplot(cdv,adv,edv,bdv,cols=2)
+          if(!(t122 == FALSE)){  
+            edv <- ggplot(data=p2,aes(y=tScatterVector,x=group))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
+            edv <- edv + geom_point(data=p2, aes(y=t12, x=group), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
+            multiplot(cdv,adv, bdv, edv,cols=2)
+          } else {
+            edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
+            edv <- edv + geom_point(data=p2, aes(y=t12, x=sNumber), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
+            multiplot(cdv,adv,bdv,edv,cols=2)
+          }
         } else {
           multiplot(cdv,adv,bdv,cols=2)
         }
@@ -704,9 +718,15 @@ shinyServer(
         cdv <- cdv+xlab("time in sec")+ylab("signal")
         
         if(length(sctn)>3){
-        edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
-        edv <- edv + geom_point(data=p2, aes(y=t12, x=sNumber), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
-        multiplot(cdv,adv,edv,cols=2)
+          if(t122 == TRUE){  
+            edv <- ggplot(data=p2,aes(y=tScatterVector,x=group))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
+            edv <- edv + geom_point(data=p2, aes(y=t12, x=group), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
+            multiplot(cdv,adv,edv,cols=2)
+          } else {
+            edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
+            edv <- edv + geom_point(data=p2, aes(y=t12, x=sNumber), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
+            multiplot(cdv,adv,edv,cols=2)
+          }
         } else {
           multiplot(cdv,adv,cols=2)
         }
@@ -720,10 +740,10 @@ shinyServer(
         if(input$ROI == 2) {return ()}
         is <- fluidPage( 
           br(),
-          h5("Bleach ROI :",m1Name),
-          h5("Total ROI :",m2Name),
-          h5("BG ROI :",m3Name),
-          h5("Bleach Area :",a1Name)
+          h5("Bleach ROI :", m1Name),
+          h5("Total ROI :", m2Name),
+          h5("BG ROI :", m3Name),
+          h5("Bleach Area :", a1Name)
         )
       })
       
