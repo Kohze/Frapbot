@@ -312,10 +312,10 @@ shinyServer(
           fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.05)) 
         }
       } else if(input$fit == 2){
-        fit = nlsLM(mxxp1m ~ -(bs1*exp(-x*tm))-((bs2)*exp(-x2*tm))+c1, data = mxf, start = list(bs1 = 1, bs2 = 0.1, x = 0.1, x2 = 4, c1 = 0.2), lower = c(0,0,0,0,0), control = list(maxiter = 1024))
+        fit = nlsLM(mxxp1m ~ -(bs1*exp(-x*tm))-((bs2)*exp(-x2*tm))+c1, data = mxf, start = list(bs1 = 0.1, bs2 = 0.1, x = 0.01, x2 = 0.01, c1 = 0.1), lower = c(0,0,0,0,0), control = list(maxiter = 1024))
       } else {
         formulaChoice = as.formula("mxxp1m ~ b*(1-exp(-x*tm))+c")
-        fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.001))
+        fit = nlsLM(formulaChoice, data = mxf, start =list(x=0.001), control = list(maxiter = 1024))
       }
       return(fit)
     }
@@ -528,6 +528,7 @@ shinyServer(
         
         b = b[1]
         c = c[1]
+        cb = (c+b)/2
         
         # command line output for tests
         #cat(c("start",min(mxxp1m),b,c,"end"), file=stderr())
@@ -535,10 +536,10 @@ shinyServer(
         
         #make data.frame for further analysis with post bleach values
         mxf = data.frame(tm,mxxp1m,b,c)
-        fit = fittingFunction(mxf)
+        
         # levenberg marquard algorithm
-        
-        
+        fit = fittingFunction(mxf)
+   
         if(!is.null(summary(fit)$sigma)){
           r = summary(fit)$sigma
           rif=1-summary(fit)$sigma
@@ -552,7 +553,6 @@ shinyServer(
           tm = tm*timeCoeff
         }
         
-        
         m1m = tail(m1,length(m1)-(bleach-1))
         m2m = tail(m2,length(m2)-(bleach-1))
         m3m = tail(m3,length(m3)-(bleach-1))
@@ -560,7 +560,6 @@ shinyServer(
         # show fit
         fitpre = predict(fit)
         fitpre = tail(fitpre,length(fitpre))
-        # fitpre = tail(fitpre,length(fitpre)-bleach)
         
         diff = mxxp1m-fitpre
         
@@ -570,29 +569,33 @@ shinyServer(
         if(!(is.na(as.vector(coef(fit)[2])))){
           tau = ((as.vector(coef(fit))[1])/(timeCoeff))
           tau2 = ((as.vector(coef(fit))[2])/(timeCoeff))
-          t12 = ((log(0.5))/(-tau))
-          t122 = ((log(0.5))/(-tau2))
+          
+          t121 = log(0.5)/(-tau)
+          t122 = log(0.5)/(-tau2)
+          
+          startVal = tm[which.min(abs(predict(fit) - (min(predict(fit)+max(predict(fit))))/2))] 
+          findVal = predict(fit, data.frame("tm" = c(seq(startVal-0.25,startVal+0.25,0.001))))
+          findValClose = which.min(abs(findVal - (min(predict(fit)+max(predict(fit)))/2)))
+          cat(file=stderr(), "findValClose", findValClose, "startVal", startVal , "\n")
+          t12 = (startVal - 0.25) + findValClose*0.001 
           
           D = 0.25*a1/(t12)
-          D2 = 0.25*a1/(t122)
-          
         } else {
           tau = ((as.vector(coef(fit))[1])/(timeCoeff))
           t12 = ((log(0.5))/(-tau))
           D = 0.25*a1/t12
           
-          tau2 = FALSE
           t122 = FALSE
-          D2 = FALSE
+          t121 = FALSE
+          tau2 = FALSE
         }
 
         a1 = a1[1]
         D = D[1]
-        D2 = D2[1]
-        
+
         output = list("half time" = t12,"quality" = rif,"m1m" = m1m, "m2m" = m2m,"m3m" = m3m,"diff" = diff,"fitpre" = fitpre,
-                      "tm" = tm, "mxxp1m" = mxxp1m,"tau" = tau,"area" = a1,"diffusion" = D, "diffusion2" = D2,
-                      "bleach" = bleach, "tau2" = tau2, "half time2" = t122, "name-m1" = names(m1[1]), 
+                      "tm" = tm, "mxxp1m" = mxxp1m,"tau" = tau,"area" = a1,"diffusion" = D,
+                      "bleach" = bleach, "tau2" = tau2, "half time2" = t122, "half time1" = t121 , "name-m1" = names(m1[1]), 
                       "name-m2" = names(m2[1]), "name-m3" = names(m3[1]), "names-a1" = names(a1[1]) ) 
         
         return(output)
@@ -623,6 +626,7 @@ shinyServer(
           if(choice == i){
             t12 = matrixH[["half time"]]
             t122 = matrixH[["half time2"]]
+            t121 = matrixH[["half time1"]]
             rif2 = matrixH[["quality"]]
             
             #unprocessed ROI means
@@ -645,7 +649,6 @@ shinyServer(
             tau2 = matrixH[["tau2"]]
             
             D = matrixH[["diffusion"]]
-            D2 = matrixH[["diffusion2"]]
             bleach = matrixH[["bleach"]]
           }
         }
@@ -661,14 +664,8 @@ shinyServer(
       # adding data together for ggplot2
       
       p1 = data.frame(mxxp1m,tm,fitpre,diff,m1m,m2m,m3m)
+      p2 = data.frame(tScatterVector,sNumber,t12)
       
-      if(t122 == FALSE) {
-        p2 = data.frame(tScatterVector,sNumber,t12)
-      } else {
-        p2_1 = data.frame(tScatterVector,sNumber,"t12" = t12, "group" = "t1/2 1")
-        p2_2 = data.frame(tScatterVector,sNumber,"t12" = t122, "group" = "t1/2 2")
-        p2 = rbind(p2_1,p2_2)
-      }
       
       if(rif2 >= input$quality){
         adv <- ggplot(p1,aes(y=mxxp1m,x=tm)) +geom_point(aes(y=mxxp1m,x=tm),color="black",size=0.3)+geom_abline(intercept=0,slope=0, size=0.8, alpha=0.7,linetype=3)
@@ -687,15 +684,9 @@ shinyServer(
         cdv <- cdv+xlab("time in sec")+ylab("signal")
         
         if(length(sctn)>3){
-          if(!(t122 == FALSE)){  
-            edv <- ggplot(data=p2,aes(y=tScatterVector,x=group))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
-            edv <- edv + geom_point(data=p2, aes(y=t12, x=group), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
-            multiplot(cdv,adv, bdv, edv,cols=2)
-          } else {
             edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
             edv <- edv + geom_point(data=p2, aes(y=t12, x=sNumber), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
             multiplot(cdv,adv,bdv,edv,cols=2)
-          }
         } else {
           multiplot(cdv,adv,bdv,cols=2)
         }
@@ -718,22 +709,16 @@ shinyServer(
         cdv <- cdv+xlab("time in sec")+ylab("signal")
         
         if(length(sctn)>3){
-          if(t122 == TRUE){  
-            edv <- ggplot(data=p2,aes(y=tScatterVector,x=group))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
-            edv <- edv + geom_point(data=p2, aes(y=t12, x=group), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
-            multiplot(cdv,adv,edv,cols=2)
-          } else {
             edv <- ggplot(data=p2,aes(y=tScatterVector,x=sNumber))+geom_boxplot()+geom_point(size=3,alpha=0.6)+theme(aspect.ratio=0.35)
             edv <- edv + geom_point(data=p2, aes(y=t12, x=sNumber), color ="red") + xlab("Scatter Plot") + ylab("t/12 in sec")
             multiplot(cdv,adv,edv,cols=2)
-          }
+          
         } else {
           multiplot(cdv,adv,cols=2)
         }
       }
       
       #Result display
-      
       output$resultOutput <- renderUI({
         if(is.null(d()) | is.null(input$mainPanel)){return()}
         if(input$mainPanel == "Dataset"){return()}
@@ -822,13 +807,10 @@ shinyServer(
           h5("Tau: ",round(tau,4)," seconds^-1"),
           h5("Tau2: ",round(tau2,4)," seconds^-1"),
           h5("Apparent D:",round(head(D,1),4), "µmeter² per second"),
-          h5("Apparent D2:",round(head(D2,1),4), "µmeter² per second"),
           h5("T1/2: ",round(t12,4)," seconds"),
-          h5("T1/2 2: ",round(t122,4)," seconds"),
           h5("Standart Error:",round((rif2),4))
           )}
       })
-       
     }
     )
   }

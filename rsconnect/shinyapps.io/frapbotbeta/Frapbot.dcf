@@ -3,9 +3,8 @@ title:
 account: frapbotbeta
 server: shinyapps.io
 appId: 121305
-bundleId: 706804
+bundleId: 778439
 url: https://frapbotbeta.shinyapps.io/Frapbot/
-when: 1486705527.38418
+when: 1491424733.29378
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: manifest.json
