@@ -172,6 +172,9 @@ shinyServer(
     
     output$scanTime <- renderUI({
       if(is.null(d())){return()}
+      if(ncol(d()) <= 4){return(
+        "The scan time was extracted from the .CSV file"
+      )}
         sliderInput("t","Scan time in ms", 1,1000,79)
     })
     
@@ -723,6 +726,7 @@ shinyServer(
         if(is.null(d()) | is.null(input$mainPanel)){return()}
         if(input$mainPanel == "Dataset"){return()}
         if(input$ROI == 2) {return ()}
+        if(ncol(d()) <= 4) {return ()}
         is <- fluidPage( 
           br(),
           h5("Bleach ROI :", m1Name),
